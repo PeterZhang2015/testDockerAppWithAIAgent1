@@ -1,0 +1,48 @@
+name: Cleanup
+
+on:
+  schedule:
+    - cron: '0 2 * * 0' # Weekly on Sunday at 2 AM UTC
+  workflow_dispatch:
+
+jobs:
+  cleanup-packages:
+    name: Cleanup Old Packages
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    
+    steps:
+    - name: Delete old package versions
+      uses: actions/delete-package-versions@v4
+      with:
+        package-name: ${{ github.repository }}
+        package-type: 'container'
+        min-versions-to-keep: 5
+        delete-only-untagged-versions: true
+        
+  cleanup-artifacts:
+    name: Cleanup Old Artifacts
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Delete old artifacts
+      uses: jimschubert/delete-artifacts-action@v1
+      with:
+        log_level: 'warn'
+        min_bytes: '0'
+        max_bytes: '1000000000' # 1GB
+        skip_recent: 5
+        
+  cleanup-caches:
+    name: Cleanup Build Caches
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Cleanup build cache
+      run: |
+        echo "Cleaning up build caches..."
+        # GitHub automatically manages cache cleanup, but we can trigger it
+        gh cache list --repo ${{ github.repository }} | head -20
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,85 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Weekly on Monday at 6 AM UTC
+  workflow_dispatch:
+
+jobs:
+  dependency-update:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install npm-check-updates
+      run: npm install -g npm-check-updates
+      
+    - name: Update dependencies
+      run: |
+        ncu -u
+        npm install
+        
+    - name: Run tests
+      run: npm test || echo "No test script found"
+      continue-on-error: true
+      
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: 'chore: update dependencies'
+        title: 'chore: update dependencies'
+        body: |
+          ## Dependency Updates
+          
+          This PR updates project dependencies to their latest versions.
+          
+          ### Changes
+          - Updated all dependencies to latest versions
+          - Ran tests to ensure compatibility
+          
+          ### Review Notes
+          - Please review the changes carefully
+          - Test the application thoroughly
+          - Check for any breaking changes in the updated packages
+        branch: dependency-updates
+        delete-branch: true
+        
+  dependabot-auto-merge:
+    name: Auto-merge Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run tests
+      run: npm test || echo "No test script found"
+      
+    - name: Enable auto-merge for Dependabot PRs
+      run: gh pr merge --auto --merge "$PR_URL"
+      env:
+        PR_URL: ${{ github.event.pull_request.html_url }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      if: success()

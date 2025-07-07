@@ -1,0 +1,111 @@
+name: Health Check
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # Every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    name: Application Health Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Check staging health
+      id: staging-health
+      run: |
+        # Replace with your actual staging URL
+        STAGING_URL="https://staging.example.com"
+        
+        if curl -f "$STAGING_URL/health" || curl -f "$STAGING_URL/"; then
+          echo "status=healthy" >> $GITHUB_OUTPUT
+          echo "✅ Staging is healthy"
+        else
+          echo "status=unhealthy" >> $GITHUB_OUTPUT
+          echo "❌ Staging is unhealthy"
+        fi
+      continue-on-error: true
+      
+    - name: Check production health
+      id: production-health
+      run: |
+        # Replace with your actual production URL
+        PRODUCTION_URL="https://production.example.com"
+        
+        if curl -f "$PRODUCTION_URL/health" || curl -f "$PRODUCTION_URL/"; then
+          echo "status=healthy" >> $GITHUB_OUTPUT
+          echo "✅ Production is healthy"
+        else
+          echo "status=unhealthy" >> $GITHUB_OUTPUT
+          echo "❌ Production is unhealthy"
+        fi
+      continue-on-error: true
+      
+    - name: Create issue on failure
+      if: steps.staging-health.outputs.status == 'unhealthy' || steps.production-health.outputs.status == 'unhealthy'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const title = 'Health Check Failed';
+          const body = `
+          ## Health Check Results
+          
+          - **Staging**: ${{ steps.staging-health.outputs.status }}
+          - **Production**: ${{ steps.production-health.outputs.status }}
+          
+          **Time**: ${new Date().toISOString()}
+          **Workflow**: ${{ github.workflow }}
+          **Run ID**: ${{ github.run_id }}
+          
+          Please investigate the failing services immediately.
+          `;
+          
+          // Check if an issue already exists
+          const issues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open',
+            labels: ['health-check', 'incident']
+          });
+          
+          if (issues.data.length === 0) {
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['health-check', 'incident', 'high-priority']
+            });
+          }
+          
+    - name: Send notification
+      if: steps.staging-health.outputs.status == 'unhealthy' || steps.production-health.outputs.status == 'unhealthy'
+      run: |
+        echo "Sending notification about health check failure..."
+        # Add your notification logic here (Slack, Teams, PagerDuty, etc.)
+        
+  performance-check:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Run performance test
+      run: |
+        # Replace with your actual application URL
+        APP_URL="https://staging.example.com"
+        
+        echo "Running performance test..."
+        
+        # Simple performance check using curl
+        RESPONSE_TIME=$(curl -o /dev/null -s -w '%{time_total}' "$APP_URL" || echo "999")
+        
+        echo "Response time: ${RESPONSE_TIME}s"
+        
+        # Alert if response time is over 2 seconds
+        if (( $(echo "$RESPONSE_TIME > 2" | bc -l) )); then
+          echo "⚠️  Performance issue detected: Response time is ${RESPONSE_TIME}s"
+          exit 1
+        else
+          echo "✅ Performance is good: Response time is ${RESPONSE_TIME}s"
+        fi
+      continue-on-error: true
