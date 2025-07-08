@@ -1,24 +1,51 @@
-# Use official Node.js runtime as base image
-FROM node:18-alpine
+# Multi-stage build for optimized Docker image
 
-# Set working directory in container
+# Stage 1: Build stage
+FROM node:18-alpine AS builder
+
+# Set working directory
 WORKDIR /usr/src/app
 
-# Copy package.json and package-lock.json (if available)
+# Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (including dev dependencies for potential build steps)
+RUN npm ci --include=dev
 
-# Copy application code
+# Copy source code
 COPY . .
 
+# Optional: Run any build steps here if needed
+# RUN npm run build
+
+# Stage 2: Production runtime stage
+FROM node:18-alpine AS runtime
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Set working directory
+WORKDIR /usr/src/app
+
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy package files
+COPY package*.json ./
+
+# Install only production dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Copy application code from builder stage
+COPY --from=builder /usr/src/app/app.js ./
+COPY --from=builder /usr/src/app/healthcheck.js ./
 
 # Change ownership of app directory to nodejs user
 RUN chown -R nodejs:nodejs /usr/src/app
+
+# Switch to non-root user
 USER nodejs
 
 # Expose port
@@ -28,5 +55,8 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node healthcheck.js
 
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
 # Start the application
-CMD ["npm", "start"]
+CMD ["node", "app.js"]
