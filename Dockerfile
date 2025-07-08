@@ -6,11 +6,11 @@ FROM node:18-alpine AS builder
 # Set working directory
 WORKDIR /usr/src/app
 
-# Copy package files
+# Copy package files first for better caching
 COPY package*.json ./
 
 # Install all dependencies (including dev dependencies for potential build steps)
-RUN npm ci --include=dev
+RUN npm ci --include=dev && npm cache clean --force
 
 # Copy source code
 COPY . .
@@ -18,7 +18,7 @@ COPY . .
 # Optional: Run any build steps here if needed
 # RUN npm run build
 
-# Stage 2: Production runtime stage
+# Stage 2: Production runtime stage with Alpine Linux for minimal size
 FROM node:18-alpine AS runtime
 
 # Install dumb-init for proper signal handling
@@ -34,11 +34,12 @@ RUN addgroup -g 1001 -S nodejs && \
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies
+# Install only production dependencies and clean cache
 RUN npm ci --only=production && \
-    npm cache clean --force
+    npm cache clean --force && \
+    rm -rf /tmp/*
 
-# Copy application code from builder stage
+# Copy application code from builder stage (only necessary files)
 COPY --from=builder /usr/src/app/app.js ./
 COPY --from=builder /usr/src/app/healthcheck.js ./
 
