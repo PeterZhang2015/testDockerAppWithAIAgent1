@@ -1,7 +1,7 @@
 # Multi-stage build for optimized Docker image
 
 # Stage 1: Build stage
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Set working directory
 WORKDIR /usr/src/app
@@ -19,7 +19,7 @@ COPY . .
 # RUN npm run build
 
 # Stage 2: Production runtime stage with Alpine Linux for minimal size
-FROM node:18-alpine AS runtime
+FROM node:24-alpine AS runtime
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
