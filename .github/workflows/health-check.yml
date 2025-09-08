@@ -43,7 +43,7 @@ jobs:
       
     - name: Create issue on failure
       if: steps.staging-health.outputs.status == 'unhealthy' || steps.production-health.outputs.status == 'unhealthy'
-      uses: actions/github-script@v6
+      uses: actions/github-script@v8
       with:
         script: |
           const title = 'Health Check Failed';
